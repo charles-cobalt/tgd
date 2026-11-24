@@ -44,7 +44,7 @@ function sequences(){
     const din=ds[i],dout=ds[i+1]||null;
     const start=din.line,end=dout?dout.line:ls.length;
     const scn=sc.find(s=>start>=s.start&&start<=s.end+1)||sc[sc.length-1]||null;
-    out.push({id:din.id,inDiv:din,outDiv:dout,start,end,scene:scn,open:!dout});
+    out.push({id:din.id,inDiv:din,outDiv:dout,start,end,scene:scn,scIdx:sc.indexOf(scn),open:!dout});
   }
   return out;
 }
@@ -313,7 +313,7 @@ function renderMacro(app){
   if(!S.scriptText.trim()){app.appendChild(el(`<div><div class="hdsp"></div><h1>Macro</h1><div class="card imp"><h2>No script yet</h2><div class="sub2">Import a script in the Script tab first.</div></div></div>`));return}
   if(!sc.length){app.appendChild(el(`<div class="card imp"><h2>No scenes detected</h2><div class="sub2">Scene headings start with INT. or EXT. Check the script formatting.</div></div>`));return}
   sc.forEach((s,si)=>{
-    const sq=seqs.filter(q=>q.scene===s);
+    const sq=seqs.filter(q=>q.scIdx===si);
     const card=el(`<div class="card sc">
       <div class="sc-h" data-jump="${s.start}">
         <div class="sc-n">SCENE ${si+1}</div>
@@ -424,7 +424,7 @@ function renderBreakdown(app){
   if(!q){app.appendChild(el(`<div><div class="hdsp"></div><h1>Breakdown</h1><div class="card imp"><h2>No sequences yet</h2><div class="sub2">Draw an IN and an OUT divider on the script to create a sequence.</div></div></div>`));return}
   SEQ_SEL=q.id;
   const sc=parseScenes(lines());
-  const si=sc.indexOf(q.scene), qi=seqs.filter(x=>x.scene===q.scene).indexOf(q);
+  const si=q.scIdx, qi=seqs.filter(x=>x.scIdx===si).indexOf(q);
   const seqName=`SCENE ${si+1} • SEQUENCE ${si+1}.${qi+1}${q.open?" (OPEN)":""}`;
   /* pager */
   const idx=seqs.indexOf(q);
