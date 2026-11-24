@@ -73,7 +73,7 @@ function render(){
 
 /* ===== SCRIPT VIEW ===== */
 function renderScript(app){
-  const hd=el(`<div><div class="hdsp"></div><h1>Script</h1><div class="sub">${S.projectTitle?esc(S.projectTitle.toUpperCase())+" • ":""}${lines().length?lines().length+" LINES":""}</div></div>`);
+  const hd=el(`<div><div class="hdsp"></div><h1>Script</h1><div class="sub">${S.projectTitle?esc(S.projectTitle.toUpperCase())+" • ":""}${S.scriptText.trim()?lines().length+" LINES":""}</div></div>`);
   app.appendChild(hd);
   if(!S.scriptText.trim()){renderImport(app);return}
   /* toolbar (TradingView-style) */
