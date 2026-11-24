@@ -167,8 +167,8 @@ function renderImport(app){
       try{
         const r=await pdfExtract(f);
         if(r.text.trim()){
-          PDFDOC=null;S.pdf=r.pdf;S.scriptText=r.text;S.view="pdf";S.dividers=[];S.breakdowns={};S.acceptedAuto=false;save();
-          idbPut("pdf",r.buf).catch(()=>{});
+          PDFDOC=r.doc;S.pdf=r.pdf;S.scriptText=r.text;S.view="pdf";S.dividers=[];S.breakdowns={};S.acceptedAuto=false;save();
+          try{await idbPut("pdf",r.buf)}catch(e){}
           render();
         }else alertInline(app,"Could not read text from that PDF.")
       }
@@ -214,7 +214,7 @@ async function pdfExtract(f){
     pages.push({w:vp.width,h:vp.height,lines:rows.map(r=>({t:r.parts.sort((a,b)=>a.x-b.x).map(q=>q.s).join(""),y:r.y}))});
   }
   const text=pages.map(p=>p.lines.map(l=>l.t).join("\n")).join("\n");
-  return {text,pdf:{name:f.name,pages},buf};
+  return {text,pdf:{name:f.name,pages},buf,doc};
 }
 /* pdf bytes live in IndexedDB so the PDF view survives reloads without bloating localStorage */
 let PDFDOC=null;
