@@ -56,7 +56,7 @@ function sceneSequences(scIdx){
 /* ---------- views ---------- */
 let VIEW="script", SEQ_SEL=null, MODE="cursor";
 function go(v){VIEW=v;render();
-  $$(".nv button").forEach(b=>b.classList.toggle("on",b.dataset.v===v));
+  $$("nav button").forEach(b=>b.classList.toggle("on",b.dataset.v===v));
   window.scrollTo({top:0});
 }
 
@@ -555,5 +555,5 @@ function applyTheme(t){
 
 /* ===== boot ===== */
 applyTheme(S.theme||"auto");
-$$(".nv button").forEach(b=>b.onclick=()=>go(b.dataset.v));
+$$("nav button").forEach(b=>b.onclick=()=>go(b.dataset.v));
 render();
