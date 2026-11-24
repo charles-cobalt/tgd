@@ -121,12 +121,12 @@ function updateHint(){
 function renderImport(app){
   const c=el(`<div class="card imp">
     <h2>Import your script</h2>
-    <div class="sub2">Paste screenplay text or load a file. Scene headings (INT. / EXT.) are detected automatically.</div>
+    <div class="sub2">Paste screenplay text or load a file (PDF or text). Scene headings (INT. / EXT.) are detected automatically.</div>
     <textarea id="impText" rows="10" placeholder=""></textarea>
     <div class="rowbtns">
       <button class="btn" id="impGo">LOAD TEXT</button>
       <button class="btn" id="impFile">CHOOSE FILE</button>
-      <input type="file" id="impInput" accept=".txt,.md,.fountain,.pdf" hidden>
+      <input type="file" id="impInput" accept="application/pdf,text/plain,.pdf,.txt,.md,.fountain" hidden>
     </div>
   </div>`);
   app.appendChild(c);
@@ -134,7 +134,7 @@ function renderImport(app){
   $("#impFile").onclick=()=>$("#impInput").click();
   $("#impInput").onchange=async e=>{
     const f=e.target.files[0];if(!f)return;
-    if(f.name.toLowerCase().endsWith(".pdf")){
+    if(f.type==="application/pdf"||f.name.toLowerCase().endsWith(".pdf")){
       try{const t=await pdfText(f);if(t.trim()){S.scriptText=t;S.dividers=[];S.breakdowns={};S.acceptedAuto=false;save();render();}else alertInline(app,"Could not read text from that PDF.")}
       catch(err){alertInline(app,"PDF import failed - paste the text instead.")}
     }else{
