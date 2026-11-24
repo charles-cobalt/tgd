@@ -45,11 +45,13 @@ textarea{resize:vertical;font:13px "Courier New",monospace;line-height:1.5}
 .ln.trans{text-align:right}
 .dlayer{position:absolute;inset:0;pointer-events:none}
 .dcv{position:absolute;inset:0;pointer-events:none;z-index:3}
-.div{position:absolute;left:0;right:0;height:0;border-top:2px solid var(--accent);pointer-events:auto;cursor:ns-resize}
-.div.out{border-top-style:dashed;border-color:#8fa3c8}
-.div.sug{border-top-style:dotted;opacity:.6}
-.div.sel{border-top-width:3px;border-color:#fff}
-.div .tag{position:absolute;left:2px;top:-9px;font:600 9px DINish,-apple-system,sans-serif;letter-spacing:.1em;padding:2px 6px;background:#2c2c2c;border:1px solid var(--line);color:var(--tx)}
+.div{position:absolute;left:0;right:0;height:26px;pointer-events:auto;cursor:ns-resize;touch-action:none;-webkit-tap-highlight-color:transparent}
+.div::before{content:"";position:absolute;left:0;right:0;top:12px;border-top:2px solid var(--accent)}
+.div.out::before{border-top-style:dashed;border-color:#8fa3c8}
+.div.sug::before{border-top-style:dotted}
+.div.sug{opacity:.6}
+.div.sel::before{border-top-width:3px;border-color:#fff}
+.div .tag{position:absolute;left:2px;top:0;font:600 9px DINish,-apple-system,sans-serif;letter-spacing:.1em;padding:2px 6px;background:#2c2c2c;border:1px solid var(--line);color:var(--tx)}
 .div .tag.out{background:#232c3a}
 /* toolbar */
 .tbox{position:fixed;right:max(6px,calc(50% - 280px + 6px));top:38%;z-index:9;display:flex;flex-direction:column;border:1px solid var(--line);background:#1a1a1ae8;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
