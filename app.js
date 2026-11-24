@@ -310,11 +310,18 @@ function autoDetect(){
   /* "automatic drawings": place IN at each scene start and OUT at each scene end - one sequence per scene - as the baseline.
      Only fills scenes that have no dividers yet. */
   const sc=parseScenes(lines());
-  const existing=sequences();
   let added=0;
-  const seqs=sequences();
+  /* close a dangling IN first so the IN/OUT alternation stays intact */
+  const ds=sortedDivs();
+  if(ds.length%2===1){
+    const last=ds[ds.length-1];
+    const sc0=sc.find(s=>last.line>=s.start&&last.line<=s.end+1);
+    S.dividers.push({id:uid(),line:sc0?sc0.end+1:lines().length,auto:true,accepted:true});
+    added++;
+  }
+  const seqs=sequences().filter(q=>!q.open);
   sc.forEach(s=>{
-    /* a scene is uncovered when no sequence's range overlaps its lines */
+    /* a scene is uncovered when no completed sequence's range overlaps its lines */
     const covered=seqs.some(q=>q.start<s.end&&q.end>s.start);
     if(!covered){
       S.dividers.push({id:uid(),line:s.start,auto:true,accepted:true});
