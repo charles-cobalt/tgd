@@ -87,7 +87,7 @@ function render(){
 
 /* ===== SCRIPT VIEW ===== */
 function renderScript(app){
-  const hd=el(`<div><div class="hdsp"></div><h1>Script</h1><div class="sub">${S.projectTitle?esc(S.projectTitle.toUpperCase())+" • ":""}${S.scriptText.trim()?lines().length+" LINES":""}</div></div>`);
+  const hd=el(`<div><div class="hdsp"></div><h1>Script</h1><div class="sub">${S.projectTitle?esc(S.projectTitle.toUpperCase())+" • ":""}${S.scriptText.trim()?lines().length+" LINES":""}</div>${fileMetaHTML()}</div>`);
   app.appendChild(hd);
   if(!S.scriptText.trim()){renderImport(app);return}
   /* toolbar (TradingView-style) */
@@ -160,6 +160,16 @@ function updateHint(){
   const n=seqs.length;
   h.textContent=n?`${n} SEQUENCE${n>1?"S":""}${open?" • 1 OPEN (NEEDS OUT)":""}`:"TAP THE SCRIPT TO MARK A SCENE IN OR OUT";
 }
+function fmtDate(ts){const d=new Date(ts);return d.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}).toUpperCase()}
+function fileMetaHTML(){
+  if(!S.fileName&&!S.fileUploadedAt)return "";
+  const parts=[];
+  if(S.fileName)parts.push(esc(S.fileName));
+  const dates=[];
+  if(S.fileUploadedAt)dates.push("UPLOADED "+fmtDate(S.fileUploadedAt));
+  if(S.fileModifiedAt)dates.push("MODIFIED "+fmtDate(S.fileModifiedAt));
+  return `<div class="sub2" style="margin-top:3px">${parts.join(" • ")}${parts.length&&dates.length?"<br>":""}${dates.join(" • ")}</div>`;
+}
 function renderImport(app){
   const c=el(`<div class="card imp">
     <h2>Import your script</h2>
@@ -172,7 +182,7 @@ function renderImport(app){
     </div>
   </div>`);
   app.appendChild(c);
-  $("#impGo").onclick=()=>{const t=$("#impText").value;if(t.trim()){S.scriptText=t;S.pdf=null;S.view="text";PDFDOC=null;S.dividers=[];S.breakdowns={};S.acceptedAuto=false;save();render();}};
+  $("#impGo").onclick=()=>{const t=$("#impText").value;if(t.trim()){S.scriptText=t;S.pdf=null;S.view="text";PDFDOC=null;S.dividers=[];S.breakdowns={};S.acceptedAuto=false;S.fileName=null;S.fileUploadedAt=Date.now();S.fileModifiedAt=null;save();render();}};
   $("#impFile").onclick=()=>$("#impInput").click();
   $("#impInput").onchange=async e=>{
     const f=e.target.files[0];if(!f)return;
@@ -180,14 +190,14 @@ function renderImport(app){
       try{
         const r=await pdfExtract(f);
         if(r.text.trim()){
-          PDFDOC=r.doc;S.pdf=r.pdf;S.scriptText=r.text;S.view="pdf";S.dividers=[];S.breakdowns={};S.acceptedAuto=false;save();
+          PDFDOC=r.doc;S.pdf=r.pdf;S.scriptText=r.text;S.view="pdf";S.dividers=[];S.breakdowns={};S.acceptedAuto=false;S.fileName=f.name;S.fileUploadedAt=Date.now();S.fileModifiedAt=f.lastModified||null;save();
           try{await idbPut("pdf",r.buf)}catch(e){}
           render();
         }else alertInline(app,"Could not read text from that PDF.")
       }
       catch(err){alertInline(app,"PDF import failed - paste the text instead.")}
     }else{
-      const t=await f.text();S.scriptText=t;S.pdf=null;S.view="text";PDFDOC=null;S.dividers=[];S.breakdowns={};S.acceptedAuto=false;save();render();
+      const t=await f.text();S.scriptText=t;S.pdf=null;S.view="text";PDFDOC=null;S.dividers=[];S.breakdowns={};S.acceptedAuto=false;S.fileName=f.name;S.fileUploadedAt=Date.now();S.fileModifiedAt=f.lastModified||null;save();render();
     }
   };
 }
@@ -196,7 +206,7 @@ function renderImportRow(app){
     <button class="btn" id="reImp">REPLACE SCRIPT</button>
   </div>`);
   r.querySelector("#reImp").onclick=()=>{
-    confirmInline(r,"Replace the script and clear all dividers and breakdowns?","REPLACE",()=>{S.scriptText="";S.pdf=null;S.view="text";PDFDOC=null;S.dividers=[];S.breakdowns={};S.acceptedAuto=false;save();render();});
+    confirmInline(r,"Replace the script and clear all dividers and breakdowns?","REPLACE",()=>{S.scriptText="";S.pdf=null;S.view="text";PDFDOC=null;S.dividers=[];S.breakdowns={};S.acceptedAuto=false;S.fileName=null;S.fileUploadedAt=null;S.fileModifiedAt=null;save();render();});
   };
   app.appendChild(r);
 }
