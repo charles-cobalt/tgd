@@ -421,6 +421,9 @@ function bindPage(page,cv){
     if(!drawing)return;
     drawing=false;
     ctx.clearRect(0,0,cv.width,cv.height);
+    /* a tap-sized dot is not a stroke: ignore it so draw mode never notates by accident */
+    const len=pts.reduce((a,p,i)=>i?a+Math.hypot(p.x-pts[i-1].x,p.y-pts[i-1].y):0,0);
+    if(pts.length<3||len<24)return;
     /* straighten: average y of stroke -> divider (automatic straightening).
        when a sequence is still open, the stroke is its OUT; otherwise it starts a new IN */
     const avg=pts.reduce((a,p)=>a+p.y,0)/pts.length;
