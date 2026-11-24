@@ -100,3 +100,9 @@ html.day .hd .hlogo{filter:invert(1) hue-rotate(180deg)}
 .pdfpage{position:relative;border:1px solid var(--line);margin-bottom:12px;background:#fff}
 .pdfcv{display:block;width:100%}
 html.day .pdfcv{filter:invert(1) hue-rotate(180deg)}
+
+/* tap menu: what does this tap mean */
+.tapmenu{position:absolute;z-index:6;width:132px;display:flex;flex-direction:column;background:#1c1c1c;border:1px solid var(--line);box-shadow:0 8px 24px #0008}
+.tapmenu button{padding:13px 12px;font:600 10px DINish,-apple-system,sans-serif;letter-spacing:.12em;color:var(--tx);text-align:left;background:none;border:none;border-bottom:1px solid var(--line);text-transform:uppercase}
+.tapmenu button:last-child{border-bottom:none}
+.tapmenu button:active{background:#2c2c2c}
