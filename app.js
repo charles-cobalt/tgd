@@ -43,7 +43,7 @@ function sequences(){
   for(let i=0;i<ds.length;i+=2){
     const din=ds[i],dout=ds[i+1]||null;
     const start=din.line,end=dout?dout.line:ls.length;
-    const scn=sc.find(s=>start>=s.start&&start<=s.end+1)||sc[sc.length-1]||null;
+    const scn=sc.find(s=>start>=s.start&&start<=s.end)||sc.find(s=>start<s.start)||sc[0]||null;
     out.push({id:din.id,inDiv:din,outDiv:dout,start,end,scene:scn,scIdx:sc.indexOf(scn),open:!dout});
   }
   return out;
@@ -221,12 +221,12 @@ function autoDetect(){
   const sc=parseScenes(lines());
   const existing=sequences();
   let added=0;
-  const used=new Set(S.dividers.map(d=>d.line));
   sc.forEach(s=>{
-    const hasDiv=S.dividers.some(d=>d.line>=s.start&&d.line<=s.end+1);
+    /* a scene is uncovered when no divider sits strictly inside it */
+    const hasDiv=S.dividers.some(d=>d.line>=s.start&&d.line<=s.end);
     if(!hasDiv){
-      if(!used.has(s.start)){S.dividers.push({id:uid(),line:s.start,auto:true,accepted:true});used.add(s.start)}
-      if(!used.has(s.end+1)){S.dividers.push({id:uid(),line:s.end+1,auto:true,accepted:true});used.add(s.end+1)}
+      S.dividers.push({id:uid(),line:s.start,auto:true,accepted:true});
+      S.dividers.push({id:uid(),line:s.end+1,auto:true,accepted:true});
       added++;
     }
   });
