@@ -250,7 +250,11 @@ async function renderPdfPage(blk){
   if(blk.dataset.rendering)return;blk.dataset.rendering="1";
   const cv=blk.querySelector("canvas");
   const doc=await pdfDoc();
-  if(!doc){blk.innerHTML='<div style="padding:40px 12px;text-align:center;font:600 10px DINish,sans-serif;letter-spacing:.1em;color:#888">PDF PAGE UNAVAILABLE - RE-UPLOAD THE PDF</div>';return}
+  if(!doc){
+    /* keep the canvas so geometry still works and a later re-upload repaints */
+    const h=$("#hintbar");if(h)h.textContent="PDF FILE NOT ON THIS DEVICE - RE-UPLOAD THE PDF OR USE TEXT VIEW";
+    return;
+  }
   const pi=+blk.dataset.p,info=S.pdf.pages[pi];
   const cssW=cv.clientWidth||blk.clientWidth-2;
   const pg=await doc.getPage(pi+1);
@@ -270,9 +274,9 @@ function lineY(i){
     else{while(pi<pages.length&&g>=pages[pi].lines.length){g-=pages[pi].lines.length;pi++}}
     const p=pages[pi],blk=document.querySelector('.pdfpage[data-p="'+pi+'"]');
     if(!p||!blk||!p.lines.length)return 0;
-    const cv=blk.querySelector("canvas"),sc=(cv.clientWidth||blk.clientWidth-2)/p.w;
+    const cv=blk.querySelector("canvas"),sc=((cv&&cv.clientWidth)||blk.clientWidth-2)/p.w;
     const ly=p.lines[Math.max(0,Math.min(g,p.lines.length-1))].y;
-    return blk.offsetTop+cv.offsetTop+(i>=total?ly+14:ly)*sc;
+    return blk.offsetTop+(cv?cv.offsetTop:1)+(i>=total?ly+14:ly)*sc;
   }
   const ptext=$("#ptext");if(!ptext)return 0;
   const ls=lines();
