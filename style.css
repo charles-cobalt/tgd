@@ -93,3 +93,10 @@ nav button.on{color:#f2f2f2}
 nav button svg{width:20px;height:20px}
 nav button span{font-size:8px;letter-spacing:.12em;text-transform:uppercase}
 html.day .hd .hlogo{filter:invert(1) hue-rotate(180deg)}
+
+/* PDF notation surface */
+.btn.on{background:#3a3a3a;color:#fff}
+.page.pdfmode{padding:6px}
+.pdfpage{position:relative;border:1px solid var(--line);margin-bottom:12px;background:#fff}
+.pdfcv{display:block;width:100%}
+html.day .pdfcv{filter:invert(1) hue-rotate(180deg)}
