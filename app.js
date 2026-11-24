@@ -37,15 +37,23 @@ function lineKind(t){
 /* divider: {id, line (boundary index: sequence starts at this line), auto:bool, accepted:bool}
    boundary index = the line number where the following content begins. Sorted by line; odd=IN, even=OUT. */
 function sortedDivs(){return [...S.dividers].sort((a,b)=>a.line-b.line)}
-function divRole(idx){return idx%2===0?"IN":"OUT"}
+function divRole(d,idx){return (d.role||(idx%2===0?"in":"out")).toUpperCase()}
 function sequences(){
+  /* each IN pairs with the next OUT below it; legacy dividers without a role fall back to position parity */
   const ds=sortedDivs(),out=[],ls=lines(),sc=parseScenes(ls);
-  for(let i=0;i<ds.length;i+=2){
-    const din=ds[i],dout=ds[i+1]||null;
+  const roleOf=(d,i)=>(d.role||(i%2===0?"in":"out")).toLowerCase();
+  const mk=(din,dout)=>{
     const start=din.line,end=dout?dout.line:ls.length;
     const scn=sc.find(s=>start>=s.start&&start<=s.end)||sc.find(s=>start<s.start)||sc[0]||null;
-    out.push({id:din.id,inDiv:din,outDiv:dout,start,end,scene:scn,scIdx:sc.indexOf(scn),open:!dout});
-  }
+    return {id:din.id,inDiv:din,outDiv:dout,start,end,scene:scn,scIdx:sc.indexOf(scn),open:!dout};
+  };
+  const queue=[];
+  ds.forEach((d,i)=>{
+    if(roleOf(d,i)==="in")queue.push(d);
+    else if(queue.length)out.push(mk(queue.shift(),d));
+  });
+  queue.forEach(din=>out.push(mk(din,null)));
+  out.sort((a,b)=>a.start-b.start);
   return out;
 }
 function sceneSequences(scIdx){
@@ -79,7 +87,6 @@ function renderScript(app){
   /* toolbar (TradingView-style) */
   const tb=el(`<div class="tbox" id="tbox">
     <button data-m="cursor" title="Select / move">${ico.cursor}</button>
-    <button data-m="line" title="Divider line">${ico.hline}</button>
     <button data-m="draw" title="Freehand draw">${ico.draw}</button>
     <button data-m="auto" title="Auto-detect sequences">${ico.auto}</button>
     <button data-m="trash" title="Delete selected">${ico.trash}</button>
@@ -145,7 +152,7 @@ function updateHint(){
   const h=$("#hintbar");if(!h)return;
   const seqs=sequences(),open=seqs.filter(q=>q.open).length;
   const n=seqs.length;
-  h.textContent=n?`${n} SEQUENCE${n>1?"S":""}${open?" • 1 OPEN (NEEDS OUT)":""}`:"DRAW A DIVIDER ACROSS THE SCRIPT TO MARK AN IN";
+  h.textContent=n?`${n} SEQUENCE${n>1?"S":""}${open?" • 1 OPEN (NEEDS OUT)":""}`:"TAP THE SCRIPT TO MARK A SCENE IN OR OUT";
 }
 function renderImport(app){
   const c=el(`<div class="card imp">
@@ -277,7 +284,7 @@ function placeDividers(){
   layer.innerHTML="";
   const ds=sortedDivs();
   ds.forEach((d,idx)=>{
-    const role=divRole(idx);
+    const role=divRole(d,idx);
     const y=lineY(d.line);
     const eld=el(`<div class="div ${role.toLowerCase()}${d.auto&&!d.accepted?" sug":""}" data-id="${d.id}" style="top:${y-13}px">
       <span class="tag ${role.toLowerCase()}">${role}</span>
@@ -300,7 +307,7 @@ function setMode(m){
   MODE=m;
   $$(".tbox button").forEach(b=>b.classList.toggle("on",b.dataset.m===MODE));
   const page=$("#page");
-  page.classList.toggle("drawmode",MODE==="draw"||MODE==="line");
+  page.classList.toggle("drawmode",MODE==="draw");
 }
 let SEL=null;
 function trashSelected(){
@@ -311,36 +318,52 @@ function autoDetect(){
      Only fills scenes that have no dividers yet. */
   const sc=parseScenes(lines());
   let added=0;
-  /* close a dangling IN first so the IN/OUT alternation stays intact */
-  const ds=sortedDivs();
-  if(ds.length%2===1){
-    const last=ds[ds.length-1];
-    const sc0=sc.find(s=>last.line>=s.start&&last.line<=s.end)||sc.find(s=>s.start>=last.line)||sc[sc.length-1];
-    S.dividers.push({id:uid(),line:sc0?sc0.end+1:lines().length,auto:true,accepted:true});
+  /* close any open IN at the end of its scene first, so pairing stays clean */
+  sequences().filter(q=>q.open).forEach(q=>{
+    const sc0=sc.find(s=>q.start>=s.start&&q.start<=s.end)||sc.find(s=>s.start>=q.start)||sc[sc.length-1];
+    S.dividers.push({id:uid(),line:sc0?sc0.end+1:lines().length,role:"out",auto:true,accepted:true});
     added++;
-  }
+  });
   const seqs=sequences().filter(q=>!q.open);
   sc.forEach(s=>{
     /* a scene is uncovered when no completed sequence's range overlaps its lines */
     const covered=seqs.some(q=>q.start<s.end&&q.end>s.start);
     if(!covered){
-      S.dividers.push({id:uid(),line:s.start,auto:true,accepted:true});
-      S.dividers.push({id:uid(),line:s.end+1,auto:true,accepted:true});
+      S.dividers.push({id:uid(),line:s.start,role:"in",auto:true,accepted:true});
+      S.dividers.push({id:uid(),line:s.end+1,role:"out",auto:true,accepted:true});
       added++;
     }
   });
   if(added){save();render()}
   else{const h=$("#hintbar");if(h)h.textContent="EVERY SCENE ALREADY HAS DIVIDERS - ADD MORE BY HAND"}
 }
-function addDivider(line,auto){
-  /* ignore duplicates at same boundary */
-  if(S.dividers.some(d=>d.line===line))return;
-  S.dividers.push({id:uid(),line,auto:!!auto,accepted:!auto});
+function addDivider(line,auto,role){
+  /* ignore duplicates at the same boundary with the same role */
+  if(role&&S.dividers.some(d=>d.line===line&&d.role===role))return;
+  if(!role&&S.dividers.some(d=>d.line===line))return;
+  S.dividers.push({id:uid(),line,role:role||null,auto:!!auto,accepted:!auto});
   save();render();
+}
+/* tap menu: choose what a tap on the script means - reading never notates */
+function closeTapMenu(){const m=$("#tapmenu");if(m)m.remove()}
+function openTapMenu(x,y){
+  closeTapMenu();
+  const page=$("#page");if(!page)return;
+  const line=nearestBoundary(y);
+  const m=el(`<div class="tapmenu" id="tapmenu">
+    <button data-r="in">SCENE IN</button>
+    <button data-r="out">SCENE OUT</button>
+  </div>`);
+  const mw=132;
+  m.style.left=Math.max(4,Math.min(x-mw/2,page.clientWidth-mw-4))+"px";
+  m.style.top=Math.max(4,y-10)+"px";
+  m.querySelector('[data-r=in]').onclick=()=>addDivider(line,false,"in");
+  m.querySelector('[data-r=out]').onclick=()=>addDivider(line,false,"out");
+  page.appendChild(m);
 }
 function bindPage(page,cv){
   const ctx=cv.getContext("2d");
-  let drawing=false,pts=[];
+  let drawing=false,pts=[],tapCandidate=null;
   function fit(){cv.width=page.clientWidth*devicePixelRatio;cv.height=page.clientHeight*devicePixelRatio;cv.style.width=page.clientWidth+"px";cv.style.height=page.clientHeight+"px";ctx.scale(devicePixelRatio,devicePixelRatio)}
   fit();
   function pos(e){const r=page.getBoundingClientRect();const p=e.touches?e.touches[0]:e;return{x:p.clientX-r.left,y:p.clientY-r.top}}
@@ -348,13 +371,9 @@ function bindPage(page,cv){
     const p=pos(e);
     const hit=e.target.closest&&e.target.closest(".div");
     if(MODE==="cursor"){
+      if(e.target.closest&&e.target.closest(".tapmenu"))return;
       if(hit){SEL=hit.dataset.id;$$(".div").forEach(x=>x.classList.toggle("sel",x.dataset.id===SEL));startDrag(hit,e)}
-      else{SEL=null;$$(".div").forEach(x=>x.classList.remove("sel"))}
-      return;
-    }
-    if(MODE==="line"){
-      const line=nearestBoundary(p.y);
-      addDivider(line,false);
+      else{SEL=null;$$(".div").forEach(x=>x.classList.remove("sel"));tapCandidate={x:p.x,y:p.y,t:Date.now()}}
       return;
     }
     if(MODE==="draw"){
@@ -402,13 +421,25 @@ function bindPage(page,cv){
     if(!drawing)return;
     drawing=false;
     ctx.clearRect(0,0,cv.width,cv.height);
-    /* straighten: average y of stroke -> divider (automatic straightening) */
+    /* straighten: average y of stroke -> divider (automatic straightening).
+       when a sequence is still open, the stroke is its OUT; otherwise it starts a new IN */
     const avg=pts.reduce((a,p)=>a+p.y,0)/pts.length;
-    addDivider(nearestBoundary(avg),false);
+    addDivider(nearestBoundary(avg),false,sequences().some(q=>q.open)?"out":"in");
   }
   page.addEventListener("pointerdown",down);
   page.addEventListener("pointermove",move,{passive:false});
   window.addEventListener("pointerup",up);
+  window.addEventListener("pointerup",e=>{
+    if(!tapCandidate)return;
+    const p=pos(e),dt=Date.now()-tapCandidate.t;
+    const moved2=Math.hypot(p.x-tapCandidate.x,p.y-tapCandidate.y);
+    tapCandidate=null;
+    if(moved2<7&&dt<700){
+      if($("#tapmenu")){closeTapMenu();return} /* tap outside dismisses */
+      if(MODE==="cursor")openTapMenu(p.x,p.y);
+    }
+  });
+  window.addEventListener("pointercancel",()=>{tapCandidate=null});
   window.addEventListener("resize",()=>{fit();placeDividers()});
 }
 
