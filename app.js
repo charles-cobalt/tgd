@@ -221,10 +221,11 @@ function autoDetect(){
   const sc=parseScenes(lines());
   const existing=sequences();
   let added=0;
+  const seqs=sequences();
   sc.forEach(s=>{
-    /* a scene is uncovered when no divider sits strictly inside it */
-    const hasDiv=S.dividers.some(d=>d.line>=s.start&&d.line<=s.end);
-    if(!hasDiv){
+    /* a scene is uncovered when no sequence's range overlaps its lines */
+    const covered=seqs.some(q=>q.start<s.end&&q.end>s.start);
+    if(!covered){
       S.dividers.push({id:uid(),line:s.start,auto:true,accepted:true});
       S.dividers.push({id:uid(),line:s.end+1,auto:true,accepted:true});
       added++;
