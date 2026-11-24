@@ -208,10 +208,17 @@ async function pdfExtract(f){
       const top=vp.height-it.transform[5];
       let row=rows.find(r=>Math.abs(r.y-top)<=2);
       if(!row){row={y:top,parts:[]};rows.push(row)}
-      row.parts.push({x:it.transform[4],s:it.str});
+      row.parts.push({x:it.transform[4],s:it.str,w:it.width||0});
     }
     rows.sort((a,b)=>a.y-b.y);
-    pages.push({w:vp.width,h:vp.height,lines:rows.map(r=>({t:r.parts.sort((a,b)=>a.x-b.x).map(q=>q.s).join(""),y:r.y}))});
+    pages.push({w:vp.width,h:vp.height,lines:rows.map(r=>{
+      let t="",end=null;
+      for(const q of r.parts.sort((a,b)=>a.x-b.x)){
+        if(end!==null&&q.x-end>2)t+=" "; /* pdf.js omits space glyphs - re-insert by x gap */
+        t+=q.s;end=q.x+q.w;
+      }
+      return {t,y:r.y};
+    })});
   }
   const text=pages.map(p=>p.lines.map(l=>l.t).join("\n")).join("\n");
   return {text,pdf:{name:f.name,pages},buf,doc};
