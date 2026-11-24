@@ -154,8 +154,8 @@ function renderImportRow(app){
 function alertInline(app,msg){const a=el(`<div class="warn">${esc(msg)}</div>`);app.appendChild(a)}
 async function pdfText(f){
   if(!window.pdfjsLib){
-    await new Promise((res,rej)=>{const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";s.onload=res;s.onerror=rej;document.head.appendChild(s)});
-    pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.worker.js";
+    await new Promise((res,rej)=>{const s=document.createElement("script");s.src="pdf.min.js";s.onload=res;s.onerror=rej;document.head.appendChild(s)});
+    pdfjsLib.GlobalWorkerOptions.workerSrc="pdf.worker.min.js";
   }
   const buf=await f.arrayBuffer();
   const pdf=await pdfjsLib.getDocument({data:buf}).promise;
