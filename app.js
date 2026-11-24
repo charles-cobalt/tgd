@@ -89,15 +89,33 @@ function renderScript(app){
     b.onclick=()=>setMode(b.dataset.m);
   });
   document.body.appendChild(tb);
+  /* TEXT | PDF toggle (only when a PDF was imported) */
+  if(S.pdf){
+    const seg=el(`<div class="rowbtns" style="margin:0 2px 10px">
+      <button class="btn${(S.view||"text")==="text"?" on":""}" id="vText">TEXT</button>
+      <button class="btn${S.view==="pdf"?" on":""}" id="vPdf">PDF</button>
+    </div>`);
+    seg.querySelector("#vText").onclick=()=>{S.view="text";save();render()};
+    seg.querySelector("#vPdf").onclick=()=>{S.view="pdf";save();render()};
+    app.appendChild(seg);
+  }
   /* script page */
-  const page=el(`<div class="page" id="page"></div>`);
-  const inner=el(`<div class="ptext" id="ptext"></div>`);
-  lines().forEach((t,i)=>{
-    const k=lineKind(t);
-    const d=el(`<div class="ln ${k}" data-i="${i}">${esc(t)||"&nbsp;"}</div>`);
-    inner.appendChild(d);
-  });
-  page.appendChild(inner);
+  const pdfMode=S.view==="pdf"&&S.pdf;
+  const page=el(`<div class="page${pdfMode?" pdfmode":""}" id="page"></div>`);
+  if(pdfMode){
+    S.pdf.pages.forEach((p,pi)=>{
+      const blk=el(`<div class="pdfpage" data-p="${pi}"><canvas class="pdfcv"></canvas></div>`);
+      page.appendChild(blk);
+    });
+  }else{
+    const inner=el(`<div class="ptext" id="ptext"></div>`);
+    lines().forEach((t,i)=>{
+      const k=lineKind(t);
+      const d=el(`<div class="ln ${k}" data-i="${i}">${esc(t)||"&nbsp;"}</div>`);
+      inner.appendChild(d);
+    });
+    page.appendChild(inner);
+  }
   /* divider layer */
   const layer=el(`<div class="dlayer" id="dlayer"></div>`);
   page.appendChild(layer);
@@ -105,6 +123,17 @@ function renderScript(app){
   const cv=el(`<canvas class="dcv" id="dcv"></canvas>`);
   page.appendChild(cv);
   app.appendChild(page);
+  if(pdfMode){
+    /* fix each block's height up front so divider geometry is stable before the paint */
+    $$(".pdfpage").forEach(blk=>{
+      const p=S.pdf.pages[+blk.dataset.p];
+      blk.querySelector("canvas").style.height=((blk.clientWidth-2)*p.h/p.w)+"px";
+    });
+    const io=new IntersectionObserver(es=>{
+      es.forEach(en=>{if(en.isIntersecting){renderPdfPage(en.target);io.unobserve(en.target)}})
+    },{rootMargin:"600px"});
+    $$(".pdfpage").forEach(b=>io.observe(b));
+  }
   /* hint bar */
   const hint=el(`<div class="hintbar" id="hintbar"></div>`);
   app.appendChild(hint);
@@ -130,15 +159,22 @@ function renderImport(app){
     </div>
   </div>`);
   app.appendChild(c);
-  $("#impGo").onclick=()=>{const t=$("#impText").value;if(t.trim()){S.scriptText=t;S.dividers=[];S.breakdowns={};S.acceptedAuto=false;save();render();}};
+  $("#impGo").onclick=()=>{const t=$("#impText").value;if(t.trim()){S.scriptText=t;S.pdf=null;S.view="text";PDFDOC=null;S.dividers=[];S.breakdowns={};S.acceptedAuto=false;save();render();}};
   $("#impFile").onclick=()=>$("#impInput").click();
   $("#impInput").onchange=async e=>{
     const f=e.target.files[0];if(!f)return;
     if(f.type==="application/pdf"||f.name.toLowerCase().endsWith(".pdf")){
-      try{const t=await pdfText(f);if(t.trim()){S.scriptText=t;S.dividers=[];S.breakdowns={};S.acceptedAuto=false;save();render();}else alertInline(app,"Could not read text from that PDF.")}
+      try{
+        const r=await pdfExtract(f);
+        if(r.text.trim()){
+          PDFDOC=null;S.pdf=r.pdf;S.scriptText=r.text;S.view="pdf";S.dividers=[];S.breakdowns={};S.acceptedAuto=false;save();
+          idbPut("pdf",r.buf).catch(()=>{});
+          render();
+        }else alertInline(app,"Could not read text from that PDF.")
+      }
       catch(err){alertInline(app,"PDF import failed - paste the text instead.")}
     }else{
-      const t=await f.text();S.scriptText=t;S.dividers=[];S.breakdowns={};S.acceptedAuto=false;save();render();
+      const t=await f.text();S.scriptText=t;S.pdf=null;S.view="text";PDFDOC=null;S.dividers=[];S.breakdowns={};S.acceptedAuto=false;save();render();
     }
   };
 }
@@ -147,35 +183,83 @@ function renderImportRow(app){
     <button class="btn" id="reImp">REPLACE SCRIPT</button>
   </div>`);
   r.querySelector("#reImp").onclick=()=>{
-    confirmInline(r,"Replace the script and clear all dividers and breakdowns?","REPLACE",()=>{S.scriptText="";S.dividers=[];S.breakdowns={};S.acceptedAuto=false;save();render();});
+    confirmInline(r,"Replace the script and clear all dividers and breakdowns?","REPLACE",()=>{S.scriptText="";S.pdf=null;S.view="text";PDFDOC=null;S.dividers=[];S.breakdowns={};S.acceptedAuto=false;save();render();});
   };
   app.appendChild(r);
 }
 function alertInline(app,msg){const a=el(`<div class="warn">${esc(msg)}</div>`);app.appendChild(a)}
-async function pdfText(f){
+async function ensurePdfjs(){
   if(!window.pdfjsLib){
     await new Promise((res,rej)=>{const s=document.createElement("script");s.src="pdf.min.js";s.onload=res;s.onerror=rej;document.head.appendChild(s)});
     pdfjsLib.GlobalWorkerOptions.workerSrc="pdf.worker.min.js";
   }
+}
+/* extract text with positions: every line knows its page and y so dividers can sit on the real PDF page */
+async function pdfExtract(f){
+  await ensurePdfjs();
   const buf=await f.arrayBuffer();
-  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
-  let out="";
-  for(let p=1;p<=pdf.numPages;p++){
-    const pg=await pdf.getPage(p),tc=await pg.getTextContent();
-    let lastY=null;
+  const doc=await pdfjsLib.getDocument({data:buf}).promise;
+  const pages=[];
+  for(let p=1;p<=doc.numPages;p++){
+    const pg=await doc.getPage(p),vp=pg.getViewport({scale:1}),tc=await pg.getTextContent();
+    const rows=[];
     for(const it of tc.items){
-      const y=it.transform[5];
-      if(lastY!==null&&Math.abs(y-lastY)>2)out+="\n";
-      out+=it.str;lastY=y;
+      if(!it.str.trim())continue;
+      const top=vp.height-it.transform[5];
+      let row=rows.find(r=>Math.abs(r.y-top)<=2);
+      if(!row){row={y:top,parts:[]};rows.push(row)}
+      row.parts.push({x:it.transform[4],s:it.str});
     }
-    out+="\n";
+    rows.sort((a,b)=>a.y-b.y);
+    pages.push({w:vp.width,h:vp.height,lines:rows.map(r=>({t:r.parts.sort((a,b)=>a.x-b.x).map(q=>q.s).join(""),y:r.y}))});
   }
-  return out;
+  const text=pages.map(p=>p.lines.map(l=>l.t).join("\n")).join("\n");
+  return {text,pdf:{name:f.name,pages},buf};
+}
+/* pdf bytes live in IndexedDB so the PDF view survives reloads without bloating localStorage */
+let PDFDOC=null;
+function idbOpen(){return new Promise((res,rej)=>{const r=indexedDB.open("tgd",1);r.onupgradeneeded=()=>r.result.createObjectStore("files");r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+async function idbPut(k,v){const db=await idbOpen();return new Promise((res,rej)=>{const tx=db.transaction("files","readwrite");tx.objectStore("files").put(v,k);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error)})}
+async function idbGet(k){const db=await idbOpen();return new Promise((res,rej)=>{const rq=db.transaction("files","readonly").objectStore("files").get(k);rq.onsuccess=()=>res(rq.result);rq.onerror=()=>rej(rq.error)})}
+async function idbDel(k){const db=await idbOpen();return new Promise((res,rej)=>{const tx=db.transaction("files","readwrite");tx.objectStore("files").delete(k);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error)})}
+async function pdfDoc(){
+  if(PDFDOC)return PDFDOC;
+  try{
+    await ensurePdfjs();
+    const buf=await idbGet("pdf");
+    if(!buf)return null;
+    PDFDOC=await pdfjsLib.getDocument({data:buf}).promise;
+    return PDFDOC;
+  }catch(e){return null}
+}
+async function renderPdfPage(blk){
+  if(blk.dataset.rendering)return;blk.dataset.rendering="1";
+  const cv=blk.querySelector("canvas");
+  const doc=await pdfDoc();
+  if(!doc){blk.innerHTML='<div style="padding:40px 12px;text-align:center;font:600 10px DINish,sans-serif;letter-spacing:.1em;color:#888">PDF PAGE UNAVAILABLE - RE-UPLOAD THE PDF</div>';return}
+  const pi=+blk.dataset.p,info=S.pdf.pages[pi];
+  const cssW=cv.clientWidth||blk.clientWidth-2;
+  const pg=await doc.getPage(pi+1);
+  const vp=pg.getViewport({scale:cssW/info.w*devicePixelRatio});
+  cv.width=vp.width;cv.height=vp.height;
+  await pg.render({canvasContext:cv.getContext("2d"),viewport:vp}).promise;
+  placeDividers();
 }
 
 /* ===== divider placement & interaction ===== */
 function lineY(i){
   /* y of boundary before line i (i may be lines().length) */
+  if(S&&S.view==="pdf"&&S.pdf){
+    const pages=S.pdf.pages,total=pages.reduce((a,p)=>a+p.lines.length,0);
+    let g=i,pi=0;
+    if(i>=total){pi=pages.length-1;g=pages[pi]?pages[pi].lines.length-1:0}
+    else{while(pi<pages.length&&g>=pages[pi].lines.length){g-=pages[pi].lines.length;pi++}}
+    const p=pages[pi],blk=document.querySelector('.pdfpage[data-p="'+pi+'"]');
+    if(!p||!blk||!p.lines.length)return 0;
+    const cv=blk.querySelector("canvas"),sc=(cv.clientWidth||blk.clientWidth-2)/p.w;
+    const ly=p.lines[Math.max(0,Math.min(g,p.lines.length-1))].y;
+    return blk.offsetTop+cv.offsetTop+(i>=total?ly+14:ly)*sc;
+  }
   const ptext=$("#ptext");if(!ptext)return 0;
   const ls=lines();
   if(i>=ls.length){const last=ptext.children[ls.length-1];return last?last.offsetTop+last.offsetHeight:0}
@@ -311,7 +395,7 @@ function bindPage(page,cv){
   page.addEventListener("pointerdown",down);
   page.addEventListener("pointermove",move,{passive:false});
   window.addEventListener("pointerup",up);
-  window.addEventListener("resize",()=>{fit()});
+  window.addEventListener("resize",()=>{fit();placeDividers()});
 }
 
 /* ===== MACRO VIEW ===== */
@@ -511,14 +595,14 @@ function renderSettings(app){
   $("#impBtn2").onclick=()=>$("#impFile2").click();
   $("#impFile2").onchange=async e=>{
     const f=e.target.files[0];if(!f)return;
-    try{const d=JSON.parse(await f.text());if(d&&typeof d==="object"&&"scriptText"in d){S=d;applyTheme(S.theme||"auto");save();render()}}catch(err){}
+    try{const d=JSON.parse(await f.text());if(d&&typeof d==="object"&&"scriptText"in d){S=d;S.view=S.view||"text";PDFDOC=null;applyTheme(S.theme||"auto");save();render()}}catch(err){}
   };
   const danger=el(`<div class="card"><h2>Reset</h2><div id="dangerZone"></div></div>`);
   app.appendChild(danger);
   const dz=danger.querySelector("#dangerZone");
   const b=el(`<button class="btn danger">RESET EVERYTHING</button>`);
   b.onclick=()=>confirmInline(dz,"This clears the script, dividers and every breakdown on this device.","DELETE",()=>{
-    S={projectTitle:"",scriptText:"",dividers:[],breakdowns:{},acceptedAuto:false,theme:S.theme};save();render();
+    S={projectTitle:"",scriptText:"",dividers:[],breakdowns:{},acceptedAuto:false,theme:S.theme};PDFDOC=null;idbDel("pdf").catch(()=>{});save();render();
   });
   dz.appendChild(b);
 }
