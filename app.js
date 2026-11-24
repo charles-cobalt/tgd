@@ -315,7 +315,7 @@ function autoDetect(){
   const ds=sortedDivs();
   if(ds.length%2===1){
     const last=ds[ds.length-1];
-    const sc0=sc.find(s=>last.line>=s.start&&last.line<=s.end+1);
+    const sc0=sc.find(s=>last.line>=s.start&&last.line<=s.end)||sc.find(s=>s.start>=last.line)||sc[sc.length-1];
     S.dividers.push({id:uid(),line:sc0?sc0.end+1:lines().length,auto:true,accepted:true});
     added++;
   }
