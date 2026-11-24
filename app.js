@@ -188,7 +188,7 @@ function placeDividers(){
   ds.forEach((d,idx)=>{
     const role=divRole(idx);
     const y=lineY(d.line);
-    const eld=el(`<div class="div ${role.toLowerCase()}${d.auto&&!d.accepted?" sug":""}" data-id="${d.id}" style="top:${y-1}px">
+    const eld=el(`<div class="div ${role.toLowerCase()}${d.auto&&!d.accepted?" sug":""}" data-id="${d.id}" style="top:${y-13}px">
       <span class="tag ${role.toLowerCase()}">${role}</span>
     </div>`);
     layer.appendChild(eld);
@@ -265,18 +265,25 @@ function bindPage(page,cv){
   }
   function startDrag(hit,e){
     const id=hit.dataset.id;
+    const d0=S.dividers.find(x=>x.id===id);
+    if(!d0)return;
+    const grabOff=pos(e).y-lineY(d0.line); /* where inside the fat handle the finger landed */
+    let moved=false;
     const move=ev=>{
       const p=pos(ev);
-      hit.style.top=(p.y-1)+"px";
+      if(!moved&&Math.abs(p.y-(lineY(d0.line)+grabOff))<4)return;
+      moved=true;
+      hit.style.top=(p.y-grabOff-13)+"px";
       ev.preventDefault();
     };
     const up=ev=>{
       window.removeEventListener("pointermove",move);
       window.removeEventListener("pointerup",up);
+      if(!moved){return} /* plain tap = select only */
       const p=pos(ev);
       const d=S.dividers.find(x=>x.id===id);
       if(d){
-        const nl=nearestBoundary(p.y);
+        const nl=nearestBoundary(p.y-grabOff);
         if(!S.dividers.some(x=>x.id!==id&&x.line===nl))d.line=nl;
         d.auto=false;d.accepted=true;save();
       }
