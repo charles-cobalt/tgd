@@ -56,6 +56,12 @@ function sequences(){
   out.sort((a,b)=>a.start-b.start);
   return out;
 }
+function numberSequences(seqs){
+  /* scene.sequence labels, e.g. 1.2 = scene 1, sequence 2 - same order as Macro/Breakdown */
+  const per={};
+  seqs.forEach(q=>{if(q.scIdx<0){q.num="";return}per[q.scIdx]=(per[q.scIdx]||0)+1;q.num=(q.scIdx+1)+"."+per[q.scIdx]});
+  return seqs;
+}
 function sceneSequences(scIdx){
   const sc=parseScenes(lines())[scIdx];
   return sequences().filter(q=>q.scene===sc);
@@ -287,11 +293,14 @@ function placeDividers(){
   const layer=$("#dlayer");if(!layer)return;
   layer.innerHTML="";
   const ds=sortedDivs();
+  const seqs=numberSequences(sequences());
   ds.forEach((d,idx)=>{
     const role=divRole(d,idx);
+    const q=seqs.find(q=>q.inDiv===d||q.outDiv===d);
+    const num=q&&q.num?" "+q.num:"";
     const y=lineY(d.line);
     const eld=el(`<div class="div ${role.toLowerCase()}${d.auto&&!d.accepted?" sug":""}" data-id="${d.id}" style="top:${y-13}px">
-      <span class="tag ${role.toLowerCase()}">${role}</span>
+      <span class="tag ${role.toLowerCase()}">${role}${num}</span>
     </div>`);
     layer.appendChild(eld);
   });
