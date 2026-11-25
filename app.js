@@ -792,7 +792,7 @@ function renderBreakdown(app){
 
 /* ===== SETTINGS VIEW ===== */
 function renderSettings(app){
-  app.appendChild(el(`<div><div class="hdsp"></div><h1>Settings</h1><div class="sub">TGD • MARK I</div></div>`));
+  app.appendChild(el(`<div><div class="hdsp"></div><h1>Settings</h1></div>`));
   /* account / sync */
   const ac=el(`<div class="card"><div id="acctBox"></div></div>`);
   const ab=ac.querySelector("#acctBox");
