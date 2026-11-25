@@ -106,8 +106,8 @@ function renderScript(app){
   /* TEXT | PDF toggle (only when a PDF was imported) */
   if(S.pdf){
     const seg=el(`<div class="rowbtns" style="margin:0 2px 10px">
-      <button class="btn${(S.view||"text")==="text"?" on":""}" id="vText">TEXT</button>
-      <button class="btn${S.view==="pdf"?" on":""}" id="vPdf">PDF</button>
+      <button class="btn${(S.view||"text")==="text"?"":" sec"}" id="vText">TEXT</button>
+      <button class="btn${S.view==="pdf"?"":" sec"}" id="vPdf">PDF</button>
     </div>`);
     seg.querySelector("#vText").onclick=()=>{S.view="text";save();render()};
     seg.querySelector("#vPdf").onclick=()=>{S.view="pdf";save();render()};
@@ -177,8 +177,8 @@ function renderImport(app){
     <div class="sub2">Paste screenplay text or load a file (PDF or text). Scene headings (INT. / EXT.) are detected automatically.</div>
     <textarea id="impText" rows="10" placeholder=""></textarea>
     <div class="rowbtns">
-      <button class="btn" id="impGo">Load text</button>
-      <button class="btn" id="impFile">Choose file</button>
+      <button class="btn sec" id="impGo">Load text</button>
+      <button class="btn sec" id="impFile">Choose file</button>
       <input type="file" id="impInput" accept="application/pdf,text/plain,.pdf,.txt,.md,.fountain" hidden>
     </div>
   </div>`);
@@ -204,7 +204,7 @@ function renderImport(app){
 }
 function renderImportRow(app){
   const r=el(`<div class="rowbtns" style="margin:14px 2px 0">
-    <button class="btn" id="reImp">Replace script</button>
+    <button class="btn sec" id="reImp">Replace script</button>
   </div>`);
   r.querySelector("#reImp").onclick=()=>{
     confirmInline(r,"Replace the script and clear all dividers and breakdowns?","REPLACE",()=>{S.scriptText="";S.pdf=null;S.view="text";PDFDOC=null;S.dividers=[];S.breakdowns={};S.acceptedAuto=false;S.fileName=null;S.fileUploadedAt=null;S.fileModifiedAt=null;save();render();});
@@ -322,7 +322,7 @@ function conflictCard(){
     <div style="margin-bottom:8px">This device and your account both changed since the last sync. Nothing is overwritten until you choose.</div>
     <div class="bdfl">THIS DEVICE${remNewer?"":" • NEWER"}</div><div style="margin-bottom:8px">${esc(loc.title)}${loc.file?" • "+esc(loc.file):""} • ${loc.lines} LINES • ${esc(fmtSync(loc.at))}</div>
     <div class="bdfl">ACCOUNT${remNewer?" • NEWER":""}</div><div style="margin-bottom:8px">${esc(rem.title)}${rem.file?" • "+esc(rem.file):""} • ${rem.lines} LINES • ${esc(fmtSync(rem.at))}</div>
-    <div class="rowbtns"><button class="btn" id="cfKeep">Keep this device</button><button class="btn" id="cfUse">Use account</button></div>
+    <div class="rowbtns"><button class="btn sec" id="cfKeep">Keep this device</button><button class="btn sec" id="cfUse">Use account</button></div>
   </div>`);
   c.querySelector("#cfKeep").onclick=async()=>{FB.pendingRemote=null;await fbPush();render()};
   c.querySelector("#cfUse").onclick=async()=>{const p=FB.pendingRemote;FB.pendingRemote=null;localStorage.removeItem("tgd.editAt");await fbAdopt({state:JSON.stringify(p.state),updatedAt:p.updatedAt})};
@@ -802,7 +802,7 @@ function renderSettings(app){
     ab.innerHTML=`${FB.pendingRemote?`<div id="cfBox"></div>`:""}
       <div class="sub2" style="margin-bottom:4px;margin-top:10px">${esc(FB.user.email)}${FB.user.emailVerified?"":" • EMAIL NOT VERIFIED"}</div>
       ${status?`<div class="sub2" style="margin-bottom:10px">${esc(status)}</div>`:""}
-      <div class="rowbtns"><button class="btn" id="acSync">Sync now</button><button class="btn" id="acOut">Sign out</button></div>`;
+      <div class="rowbtns"><button class="btn sec" id="acSync">Sync now</button><button class="btn sec" id="acOut">Sign out</button></div>`;
     if(FB.pendingRemote){const cc=conflictCard();if(cc)ab.querySelector("#cfBox").appendChild(cc)}
     ab.querySelector("#acSync").onclick=async()=>{FB.msg="";render();await fbSyncNow();render()};
     ab.querySelector("#acOut").onclick=async()=>{await FB.m.signOut(FB.auth);FB.user=null;FB.msg="";FB.pendingRemote=null;render()};
@@ -810,8 +810,8 @@ function renderSettings(app){
     ab.innerHTML=`<div class="sub2" style="margin-bottom:10px">Sign in to keep scripts, dividers and breakdowns in sync across your devices. Signed out, everything stays on this device only.</div>
       <div class="bdf"><div class="bdfl">EMAIL</div><input type="email" id="acEm" autocomplete="email"></div>
       <div class="bdf"><div class="bdfl">PASSWORD</div><input type="password" id="acPw" autocomplete="current-password"></div>
-      <div class="rowbtns"><button class="btn" id="acIn">Sign in</button><button class="btn" id="acUp">Create account</button></div>
-      <div class="rowbtns"><button class="btn" id="acReset">Reset password</button></div>
+      <div class="rowbtns"><button class="btn" id="acIn">Sign in</button><button class="btn sec" id="acUp">Create account</button></div>
+      <div class="rowbtns"><button class="btn sec" id="acReset">Reset password</button></div>
       ${FB.msg?`<div class="sub2" style="margin-top:8px">${esc(FB.msg)}</div>`:""}`;
     ab.querySelector("#acIn").onclick=()=>acctGo("in");
     ab.querySelector("#acUp").onclick=()=>acctGo("up");
@@ -819,7 +819,7 @@ function renderSettings(app){
   }
   app.appendChild(ac);
   const th=el(`<div class="card"><h2>Theme</h2><div class="optrow" id="thRow">
-    ${["auto","day","night"].map(t=>`<button class="opt${S.theme===t?" on":""}" data-t="${t}">${t.toUpperCase()}</button>`).join("")}
+    ${["night","day","auto"].map(t=>`<button class="opt${S.theme===t?" on":""}" data-t="${t}">${t[0].toUpperCase()+t.slice(1)}</button>`).join("")}
   </div></div>`);
   app.appendChild(th);
   th.querySelectorAll(".opt").forEach(b=>b.onclick=()=>{S.theme=b.dataset.t;applyTheme(S.theme);save();render()});
@@ -827,8 +827,8 @@ function renderSettings(app){
   app.appendChild(pj);
   pj.querySelector("#pjT").onchange=e=>{S.projectTitle=e.target.value;save()};
   const io=el(`<div class="card"><h2>Backup</h2><div class="rowbtns">
-    <button class="btn" id="expBtn">Export</button>
-    <button class="btn" id="impBtn2">Import</button>
+    <button class="btn sec" id="expBtn">Export</button>
+    <button class="btn sec" id="impBtn2">Import</button>
     <input type="file" id="impFile2" accept=".json" hidden>
   </div></div>`);
   app.appendChild(io);
@@ -844,7 +844,7 @@ function renderSettings(app){
   const danger=el(`<div class="card"><h2>Reset</h2><div id="dangerZone"></div></div>`);
   app.appendChild(danger);
   const dz=danger.querySelector("#dangerZone");
-  const b=el(`<button class="btn danger">Reset everything</button>`);
+  const b=el(`<button class="btn sec">Reset everything</button>`);
   b.onclick=()=>confirmInline(dz,"This clears the script, dividers and every breakdown on this device.","DELETE",()=>{
     S={projectTitle:"",scriptText:"",dividers:[],breakdowns:{},acceptedAuto:false,theme:S.theme};PDFDOC=null;idbDel("pdf").catch(()=>{});save();render();
   });
@@ -857,11 +857,11 @@ function confirmInline(host,msg,word,fn){
   const c=el(`<div class="warn"><div>${esc(msg)}</div>
     <div class="bdfl" style="margin-top:8px">TYPE ${esc(word)} TO CONFIRM</div>
     <input type="text" autocapitalize="characters">
-    <div class="rowbtns"><button class="btn danger" disabled>Confirm</button><button class="btn">Cancel</button></div>
+    <div class="rowbtns"><button class="btn sec" style="opacity:.4" disabled>Confirm</button><button class="btn sec">Cancel</button></div>
   </div>`);
   host.appendChild(c);
   const inp=c.querySelector("input"),ok=c.querySelectorAll("button")[0],cancel=c.querySelectorAll("button")[1];
-  inp.oninput=()=>{ok.disabled=inp.value.trim().toUpperCase()!==word};
+  inp.oninput=()=>{const good=inp.value.trim().toUpperCase()===word;ok.disabled=!good;ok.className=good?"btn":"btn sec";ok.style.opacity=good?"1":".4"};
   ok.onclick=fn;
   cancel.onclick=()=>render();
 }
