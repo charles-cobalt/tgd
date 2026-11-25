@@ -794,25 +794,31 @@ function renderBreakdown(app){
 function renderSettings(app){
   app.appendChild(el(`<div><div class="hdsp"></div><h1>Settings</h1></div>`));
   /* account / sync */
-  const ac=el(`<div class="card"><div id="acctBox"></div></div>`);
+  const ac=el(`<div class="card p"><div id="acctBox"></div></div>`);
   const ab=ac.querySelector("#acctBox");
   if(FB.user){
     const ls=+localStorage.getItem("tgd.lastSync")||0;
-    const status=FB.pendingRemote?"REVIEW WAITING":FB.syncing?"SYNCING…":FB.msg?FB.msg:ls?("SYNCED "+fmtSync(ls).toUpperCase()):"";
     ab.innerHTML=`${FB.pendingRemote?`<div id="cfBox"></div>`:""}
-      <div class="sub2" style="margin-bottom:4px;margin-top:10px">${esc(FB.user.email)}${FB.user.emailVerified?"":" • EMAIL NOT VERIFIED"}</div>
-      ${status?`<div class="sub2" style="margin-bottom:10px">${esc(status)}</div>`:""}
-      <div class="rowbtns"><button class="btn sec" id="acSync">Sync now</button><button class="btn sec" id="acOut">Sign out</button></div>`;
+      <div>${esc(FB.user.email)}</div>
+      <div class="mu" style="margin-top:4px">${FB.user.emailVerified?"Email verified. Synced across your devices.":"Email not verified yet. Check your inbox. Synced across your devices."}${ls?` Last synced ${new Date(ls).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}.`:""}</div>
+      ${FB.user.emailVerified?"":`<button class="btn sec" id="acResend" style="width:100%;box-sizing:border-box">Resend verification email</button><button class="btn sec" id="acChk" style="width:100%;box-sizing:border-box">I verified my email</button>`}
+      <div class="rowbtns" style="margin-top:10px"><button class="btn sec" id="acSync" style="flex:1;margin-top:0">Sync now</button><button class="btn sec" id="acOut" style="flex:1;margin-top:0">Sign out</button></div>
+      ${FB.msg?`<div class="mu" style="margin-top:8px">${esc(FB.msg)}</div>`:""}`;
     if(FB.pendingRemote){const cc=conflictCard();if(cc)ab.querySelector("#cfBox").appendChild(cc)}
+    if(!FB.user.emailVerified){
+      ab.querySelector("#acResend").onclick=async()=>{try{await FB.m.sendEmailVerification(FB.user);FB.msg="Verification email sent"}catch(e){FB.msg="Could not send the email right now"}render()};
+      ab.querySelector("#acChk").onclick=async()=>{try{await FB.user.reload();FB.user=FB.auth.currentUser}catch(e){}render()};
+    }
     ab.querySelector("#acSync").onclick=async()=>{FB.msg="";render();await fbSyncNow();render()};
     ab.querySelector("#acOut").onclick=async()=>{await FB.m.signOut(FB.auth);FB.user=null;FB.msg="";FB.pendingRemote=null;render()};
   }else{
-    ab.innerHTML=`<div class="sub2" style="margin-bottom:10px">Sign in to keep scripts, dividers and breakdowns in sync across your devices. Signed out, everything stays on this device only.</div>
-      <div class="bdf"><div class="bdfl">EMAIL</div><input type="email" id="acEm" autocomplete="email"></div>
-      <div class="bdf"><div class="bdfl">PASSWORD</div><input type="password" id="acPw" autocomplete="current-password"></div>
-      <div class="rowbtns"><button class="btn" id="acIn">Sign in</button><button class="btn sec" id="acUp">Create account</button></div>
-      <div class="rowbtns"><button class="btn sec" id="acReset">Reset password</button></div>
-      ${FB.msg?`<div class="sub2" style="margin-top:8px">${esc(FB.msg)}</div>`:""}`;
+    ab.innerHTML=`<div class="mu" style="margin-bottom:4px">Signed out. Your script is saved on this device only.</div>
+      <label class="f" for="acEm">Email</label><input type="email" id="acEm" autocomplete="email" autocapitalize="off" spellcheck="false">
+      <label class="f" for="acPw">Password</label><input type="password" id="acPw" autocomplete="current-password">
+      <div class="mu" style="margin-top:4px">Passwords need at least 6 characters.</div>
+      <div class="rowbtns" style="margin-top:10px"><button class="btn" id="acIn" style="flex:1;margin-top:0">Sign in</button><button class="btn sec" id="acUp" style="flex:1;margin-top:0">Create account</button></div>
+      <div class="rowbtns" style="margin-top:10px"><button class="btn sec" id="acReset" style="flex:1;margin-top:0">Forgot password</button></div>
+      ${FB.msg?`<div class="mu" style="margin-top:8px">${esc(FB.msg)}</div>`:""}`;
     ab.querySelector("#acIn").onclick=()=>acctGo("in");
     ab.querySelector("#acUp").onclick=()=>acctGo("up");
     ab.querySelector("#acReset").onclick=()=>acctGo("reset");
