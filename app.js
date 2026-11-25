@@ -8,7 +8,7 @@ const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 /* ---------- state ---------- */
 let S=load()||{projectTitle:"",scriptText:"",dividers:[],breakdowns:{},acceptedAuto:false,theme:"auto"};
 function load(){try{return JSON.parse(localStorage.getItem(LS_KEY))}catch(e){return null}}
-function save(){localStorage.setItem(LS_KEY,JSON.stringify(S));fbSchedulePush()}
+function save(){localStorage.setItem(LS_KEY,JSON.stringify(S));if(!FB.adopting)localStorage.setItem("tgd.editAt",String(Date.now()));fbSchedulePush()}
 
 /* ---------- screenplay parsing ---------- */
 const SCENE_RE=/^\s*((INT|EXT|EST|INT\.?\/EXT|I\/E)[\.\s])/i;
@@ -82,6 +82,7 @@ function render(){
   else if(VIEW==="macro")renderMacro(app);
   else if(VIEW==="breakdown")renderBreakdown(app);
   else if(VIEW==="settings")renderSettings(app);
+  if(FB.pendingRemote&&VIEW!=="settings"){const cc=conflictCard();if(cc)app.insertBefore(cc,app.children[1]||null)}
   requestAnimationFrame(placeDividers);
 }
 
@@ -254,7 +255,7 @@ async function idbGet(k){const db=await idbOpen();return new Promise((res,rej)=>
 async function idbDel(k){const db=await idbOpen();return new Promise((res,rej)=>{const tx=db.transaction("files","readwrite");tx.objectStore("files").delete(k);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error)})}
 /* ---------- account sync (own free Firebase project, Spark $0) ---------- */
 /* state doc: users/{uid} {state:JSON, updatedAt} | pdf bytes: users/{uid}/chunks/{i} base64 */
-const FB={ready:false,user:null,unsub:null,pushTimer:null,lastPushedAt:0,pushing:false,adopting:false,pdfPushedId:null,msg:""};
+const FB={ready:false,user:null,unsub:null,pushTimer:null,lastPushedAt:0,pushing:false,adopting:false,pdfPushedId:null,msg:"",pendingRemote:null,syncing:false,lastSyncAt:0};
 const FB_CFG={apiKey:"AIzaSyC9OjaCLJEW1upjGRrliwkPBoeGGU9LIiQ",authDomain:"the-grand-design.firebaseapp.com",projectId:"the-grand-design",storageBucket:"the-grand-design.firebasestorage.app",messagingSenderId:"402292427236",appId:"1:402292427236:web:b798db587495da4e33dff1"};
 async function fbInit(){
   if(FB.ready)return true;
@@ -278,15 +279,54 @@ function fbSchedulePush(){
   FB.pushTimer=setTimeout(()=>fbPush(),800);
 }
 async function fbPush(){
-  if(!FB.ready||!FB.user||FB.adopting)return;
+  if(!FB.ready||!FB.user||FB.adopting||FB.pendingRemote)return;
   FB.pushing=true;
   try{
     const ts=Date.now();
     await FB.m.setDoc(FB.m.doc(FB.db,"users",FB.user.uid),{state:JSON.stringify(S),updatedAt:ts,v:1});
-    FB.lastPushedAt=ts;FB.msg="";
+    FB.lastPushedAt=ts;localStorage.setItem("tgd.lastPush",String(ts));
+    FB.lastSyncAt=Date.now();localStorage.setItem("tgd.lastSync",String(FB.lastSyncAt));
+    FB.msg="";
     await fbPushPdf();
   }catch(e){FB.msg="Sync failed - will retry on next change"}
   FB.pushing=false;
+}
+async function fbSyncNow(){
+  if(!FB.ready||!FB.user||FB.adopting)return;
+  FB.syncing=true;
+  try{
+    const snap=await FB.m.getDoc(FB.m.doc(FB.db,"users",FB.user.uid));
+    const lp=FB.lastPushedAt||+localStorage.getItem("tgd.lastPush")||0;
+    if(snap.exists()){const d=snap.data();if((d.updatedAt||0)>lp){await maybeAdopt(d);FB.syncing=false;return}}
+    await fbPush();
+  }catch(e){FB.msg="Sync failed - check your connection"}
+  FB.syncing=false;
+}
+function statesDiffer(a,b){try{return JSON.stringify(a)!==JSON.stringify(b)}catch(e){return true}}
+async function maybeAdopt(d){
+  let remote;try{remote=JSON.parse(d.state)}catch(e){return}
+  const lp=FB.lastPushedAt||+localStorage.getItem("tgd.lastPush")||0;
+  const le=+localStorage.getItem("tgd.editAt")||0;
+  const localHasWork=!!((S.scriptText||"").trim()||(S.dividers||[]).length);
+  if(le>lp&&localHasWork&&statesDiffer(remote,S)){FB.pendingRemote={state:remote,updatedAt:d.updatedAt||Date.now()};render();return}
+  await fbAdopt(d);
+}
+function fmtSync(t){const d=new Date(+t);return d.toLocaleDateString(undefined,{month:"short",day:"numeric"})+" "+d.toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"})}
+function conflictCard(){
+  const r=FB.pendingRemote;if(!r)return null;
+  const le=+localStorage.getItem("tgd.editAt")||0;
+  const loc={title:S.projectTitle||"Untitled",file:S.fileName,lines:(S.scriptText||"").trim()?(S.scriptText||"").split("\n").length:0,at:le};
+  const rem={title:r.state.projectTitle||"Untitled",file:r.state.fileName,lines:(r.state.scriptText||"").trim()?(r.state.scriptText||"").split("\n").length:0,at:r.updatedAt};
+  const remNewer=r.updatedAt>le;
+  const c=el(`<div class="warn"><div class="bdfl" style="margin-bottom:6px">REVIEW SYNC</div>
+    <div style="margin-bottom:8px">This device and your account both changed since the last sync. Nothing is overwritten until you choose.</div>
+    <div class="bdfl">THIS DEVICE${remNewer?"":" • NEWER"}</div><div style="margin-bottom:8px">${esc(loc.title)}${loc.file?" • "+esc(loc.file):""} • ${loc.lines} LINES • ${esc(fmtSync(loc.at))}</div>
+    <div class="bdfl">ACCOUNT${remNewer?" • NEWER":""}</div><div style="margin-bottom:8px">${esc(rem.title)}${rem.file?" • "+esc(rem.file):""} • ${rem.lines} LINES • ${esc(fmtSync(rem.at))}</div>
+    <div class="rowbtns"><button class="btn" id="cfKeep">KEEP THIS DEVICE</button><button class="btn" id="cfUse">USE ACCOUNT</button></div>
+  </div>`);
+  c.querySelector("#cfKeep").onclick=async()=>{FB.pendingRemote=null;await fbPush();render()};
+  c.querySelector("#cfUse").onclick=async()=>{const p=FB.pendingRemote;FB.pendingRemote=null;localStorage.removeItem("tgd.editAt");await fbAdopt({state:JSON.stringify(p.state),updatedAt:p.updatedAt})};
+  return c;
 }
 async function fbAuthChanged(u){
   FB.user=u;
@@ -295,15 +335,15 @@ async function fbAuthChanged(u){
     try{
       const snap=await FB.m.getDoc(FB.m.doc(FB.db,"users",u.uid));
       if(snap.exists()){
-        const d=snap.data();FB.lastPushedAt=d.updatedAt||0;
-        await fbAdopt(d);
+        const d=snap.data();FB.lastPushedAt=+localStorage.getItem("tgd.lastPush")||0;
+        await maybeAdopt(d);
       }else{
         await fbPush(); /* first sync: this device's data becomes the account's */
       }
       FB.unsub=FB.m.onSnapshot(FB.m.doc(FB.db,"users",u.uid),sn=>{
         if(sn.metadata.hasPendingWrites||FB.pushing||FB.adopting)return;
         const d=sn.data();if(!d)return;
-        if((d.updatedAt||0)>FB.lastPushedAt)fbAdopt(d);
+        if((d.updatedAt||0)>(FB.lastPushedAt||+localStorage.getItem("tgd.lastPush")||0))maybeAdopt(d);
       });
     }catch(e){FB.msg="Sync unavailable right now"}
   }
@@ -314,11 +354,13 @@ async function fbAdopt(d){
   try{
     S=JSON.parse(d.state);
     localStorage.setItem(LS_KEY,JSON.stringify(S));
-    FB.lastPushedAt=d.updatedAt||Date.now();
+    FB.lastPushedAt=d.updatedAt||Date.now();localStorage.setItem("tgd.lastPush",String(FB.lastPushedAt));
+    FB.lastSyncAt=Date.now();localStorage.setItem("tgd.lastSync",String(FB.lastSyncAt));
     await fbPullPdf();
     PDFDOC=null;
     applyTheme(S.theme||"auto");
-    render();
+    const ae=document.activeElement;
+    if(!(ae&&(ae.tagName==="INPUT"||ae.tagName==="TEXTAREA")))render();
   }catch(e){}
   FB.adopting=false;
 }
@@ -755,11 +797,15 @@ function renderSettings(app){
   const ac=el(`<div class="card"><h2>Account</h2><div id="acctBox"></div></div>`);
   const ab=ac.querySelector("#acctBox");
   if(FB.user){
-    ab.innerHTML=`<div class="sub2" style="margin-bottom:10px">${esc(FB.user.email)}${FB.user.emailVerified?"":" • EMAIL NOT VERIFIED"}</div>
-      <div class="rowbtns"><button class="btn" id="acSync">SYNC NOW</button><button class="btn" id="acOut">SIGN OUT</button></div>
-      ${FB.msg?`<div class="sub2" style="margin-top:8px">${esc(FB.msg)}</div>`:""}`;
-    ab.querySelector("#acSync").onclick=async()=>{FB.msg="Syncing...";render();await fbPush();if(!FB.msg)FB.msg="Synced";render()};
-    ab.querySelector("#acOut").onclick=async()=>{await FB.m.signOut(FB.auth);FB.user=null;FB.msg="";render()};
+    const ls=+localStorage.getItem("tgd.lastSync")||0;
+    const status=FB.pendingRemote?"REVIEW WAITING":FB.syncing?"SYNCING…":FB.msg?FB.msg:ls?("SYNCED "+fmtSync(ls).toUpperCase()):"";
+    ab.innerHTML=`${FB.pendingRemote?`<div id="cfBox"></div>`:""}
+      <div class="sub2" style="margin-bottom:4px;margin-top:10px">${esc(FB.user.email)}${FB.user.emailVerified?"":" • EMAIL NOT VERIFIED"}</div>
+      ${status?`<div class="sub2" style="margin-bottom:10px">${esc(status)}</div>`:""}
+      <div class="rowbtns"><button class="btn" id="acSync">SYNC NOW</button><button class="btn" id="acOut">SIGN OUT</button></div>`;
+    if(FB.pendingRemote){const cc=conflictCard();if(cc)ab.querySelector("#cfBox").appendChild(cc)}
+    ab.querySelector("#acSync").onclick=async()=>{FB.msg="";render();await fbSyncNow();render()};
+    ab.querySelector("#acOut").onclick=async()=>{await FB.m.signOut(FB.auth);FB.user=null;FB.msg="";FB.pendingRemote=null;render()};
   }else{
     ab.innerHTML=`<div class="sub2" style="margin-bottom:10px">Sign in to keep scripts, dividers and breakdowns in sync across your devices. Signed out, everything stays on this device only.</div>
       <div class="bdf"><div class="bdfl">EMAIL</div><input type="email" id="acEm" autocomplete="email"></div>
@@ -847,5 +893,11 @@ function applyTheme(t){
 applyTheme(S.theme||"auto");
 $$("nav button").forEach(b=>b.onclick=()=>go(b.dataset.v));
 render();
+
+/* ===== pull-down to sync (like the 4 horsemen: data only, silent) ===== */
+let pdY=null,pdPull=false;
+window.addEventListener("touchstart",e=>{pdY=(window.scrollY<=0&&e.touches.length===1)?e.touches[0].clientY:null;pdPull=false},{passive:true});
+window.addEventListener("touchmove",e=>{if(pdY!=null&&e.touches.length===1&&e.touches[0].clientY-pdY>70)pdPull=true},{passive:true});
+window.addEventListener("touchend",()=>{if(pdPull&&FB.user&&!FB.pendingRemote)fbSyncNow();pdY=null;pdPull=false},{passive:true});
 
 fbInit();
