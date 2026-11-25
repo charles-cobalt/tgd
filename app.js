@@ -8,7 +8,7 @@ const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 /* ---------- state ---------- */
 let S=load()||{projectTitle:"",scriptText:"",dividers:[],breakdowns:{},acceptedAuto:false,theme:"auto"};
 function load(){try{return JSON.parse(localStorage.getItem(LS_KEY))}catch(e){return null}}
-function save(){localStorage.setItem(LS_KEY,JSON.stringify(S))}
+function save(){localStorage.setItem(LS_KEY,JSON.stringify(S));fbSchedulePush()}
 
 /* ---------- screenplay parsing ---------- */
 const SCENE_RE=/^\s*((INT|EXT|EST|INT\.?\/EXT|I\/E)[\.\s])/i;
@@ -190,7 +190,7 @@ function renderImport(app){
       try{
         const r=await pdfExtract(f);
         if(r.text.trim()){
-          PDFDOC=r.doc;S.pdf=r.pdf;S.scriptText=r.text;S.view="pdf";S.dividers=[];S.breakdowns={};S.acceptedAuto=false;S.fileName=f.name;S.fileUploadedAt=Date.now();S.fileModifiedAt=f.lastModified||null;save();
+          PDFDOC=r.doc;S.pdf=r.pdf;S.scriptText=r.text;S.view="pdf";S.dividers=[];S.breakdowns={};S.acceptedAuto=false;S.fileName=f.name;S.fileUploadedAt=Date.now();S.fileModifiedAt=f.lastModified||null;S.pdfId=S.fileUploadedAt+"-"+r.buf.byteLength;save();
           try{await idbPut("pdf",r.buf)}catch(e){}
           render();
         }else alertInline(app,"Could not read text from that PDF.")
@@ -252,6 +252,109 @@ function idbOpen(){return new Promise((res,rej)=>{const r=indexedDB.open("tgd",1
 async function idbPut(k,v){const db=await idbOpen();return new Promise((res,rej)=>{const tx=db.transaction("files","readwrite");tx.objectStore("files").put(v,k);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error)})}
 async function idbGet(k){const db=await idbOpen();return new Promise((res,rej)=>{const rq=db.transaction("files","readonly").objectStore("files").get(k);rq.onsuccess=()=>res(rq.result);rq.onerror=()=>rej(rq.error)})}
 async function idbDel(k){const db=await idbOpen();return new Promise((res,rej)=>{const tx=db.transaction("files","readwrite");tx.objectStore("files").delete(k);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error)})}
+/* ---------- account sync (own free Firebase project, Spark $0) ---------- */
+/* state doc: users/{uid} {state:JSON, updatedAt} | pdf bytes: users/{uid}/chunks/{i} base64 */
+const FB={ready:false,user:null,unsub:null,pushTimer:null,lastPushedAt:0,pushing:false,adopting:false,pdfPushedId:null,msg:""};
+const FB_CFG={apiKey:"AIzaSyC9OjaCLJEW1upjGRrliwkPBoeGGU9LIiQ",authDomain:"the-grand-design.firebaseapp.com",projectId:"the-grand-design",storageBucket:"the-grand-design.firebasestorage.app",messagingSenderId:"402292427236",appId:"1:402292427236:web:b798db587495da4e33dff1"};
+async function fbInit(){
+  if(FB.ready)return true;
+  try{
+    const [appM,authM,fsM]=await Promise.all([
+      import("https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js"),
+      import("https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js"),
+      import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js")]);
+    FB.app=appM.initializeApp(FB_CFG);
+    FB.auth=authM.getAuth(FB.app);
+    FB.db=fsM.getFirestore(FB.app);
+    FB.m=Object.assign({},authM,fsM);
+    FB.ready=true;
+    authM.onAuthStateChanged(FB.auth,u=>fbAuthChanged(u));
+    return true;
+  }catch(e){FB.msg="Sync needs an internet connection";return false}
+}
+function fbSchedulePush(){
+  if(!FB.ready||!FB.user||FB.adopting)return;
+  clearTimeout(FB.pushTimer);
+  FB.pushTimer=setTimeout(()=>fbPush(),800);
+}
+async function fbPush(){
+  if(!FB.ready||!FB.user||FB.adopting)return;
+  FB.pushing=true;
+  try{
+    const ts=Date.now();
+    await FB.m.setDoc(FB.m.doc(FB.db,"users",FB.user.uid),{state:JSON.stringify(S),updatedAt:ts,v:1});
+    FB.lastPushedAt=ts;FB.msg="";
+    await fbPushPdf();
+  }catch(e){FB.msg="Sync failed - will retry on next change"}
+  FB.pushing=false;
+}
+async function fbAuthChanged(u){
+  FB.user=u;
+  if(FB.unsub){FB.unsub();FB.unsub=null}
+  if(u){
+    try{
+      const snap=await FB.m.getDoc(FB.m.doc(FB.db,"users",u.uid));
+      if(snap.exists()){
+        const d=snap.data();FB.lastPushedAt=d.updatedAt||0;
+        await fbAdopt(d);
+      }else{
+        await fbPush(); /* first sync: this device's data becomes the account's */
+      }
+      FB.unsub=FB.m.onSnapshot(FB.m.doc(FB.db,"users",u.uid),sn=>{
+        if(sn.metadata.hasPendingWrites||FB.pushing||FB.adopting)return;
+        const d=sn.data();if(!d)return;
+        if((d.updatedAt||0)>FB.lastPushedAt)fbAdopt(d);
+      });
+    }catch(e){FB.msg="Sync unavailable right now"}
+  }
+  if(VIEW==="settings")render();
+}
+async function fbAdopt(d){
+  FB.adopting=true;
+  try{
+    S=JSON.parse(d.state);
+    localStorage.setItem(LS_KEY,JSON.stringify(S));
+    FB.lastPushedAt=d.updatedAt||Date.now();
+    await fbPullPdf();
+    PDFDOC=null;
+    applyTheme(S.theme||"auto");
+    render();
+  }catch(e){}
+  FB.adopting=false;
+}
+function b64enc(buf){const u=new Uint8Array(buf);let s="";for(let i=0;i<u.length;i+=32768)s+=String.fromCharCode.apply(null,u.subarray(i,i+32768));return btoa(s)}
+function b64dec(b){const t=atob(b);const u=new Uint8Array(t.length);for(let i=0;i<t.length;i++)u[i]=t.charCodeAt(i);return u.buffer}
+async function fbPushPdf(){
+  if(!S.pdf||!S.pdfId||FB.pdfPushedId===S.pdfId)return;
+  const buf=await idbGet("pdf");if(!buf)return;
+  const b64=b64enc(buf),CH=700000,n=Math.ceil(b64.length/CH);
+  for(let i=0;i<n;i++)await FB.m.setDoc(FB.m.doc(FB.db,"users",FB.user.uid,"chunks",String(i)),{i:i,data:b64.slice(i*CH,(i+1)*CH)});
+  FB.pdfPushedId=S.pdfId;
+}
+async function fbPullPdf(){
+  if(!S.pdf||!S.pdfId)return;
+  if(localStorage.getItem("tgd.pdfid")===S.pdfId)return;
+  const snap=await FB.m.getDocs(FB.m.collection(FB.db,"users",FB.user.uid,"chunks"));
+  if(snap.empty)return;
+  const parts=[];snap.forEach(d=>parts[d.data().i]=d.data().data);
+  await idbPut("pdf",b64dec(parts.join("")));
+  localStorage.setItem("tgd.pdfid",S.pdfId);
+  FB.pdfPushedId=S.pdfId;
+}
+function fbErr(e){const c=((e&&e.code)||"").replace("auth/","").replace(/-/g," ");return c?("Couldn't sign in: "+c):"Couldn't sign in"}
+async function acctGo(kind){
+  FB.msg="";
+  if(!await fbInit()){render();return}
+  const em=$("#acEm").value.trim(),pw=$("#acPw").value;
+  if(!em||!pw){FB.msg="Enter your email and a password";render();return}
+  try{
+    if(kind==="in")await FB.m.signInWithEmailAndPassword(FB.auth,em,pw);
+    else if(kind==="up"){const c=await FB.m.createUserWithEmailAndPassword(FB.auth,em,pw);try{await FB.m.sendEmailVerification(c.user)}catch(e){}FB.msg="Account created - verification email sent"}
+    else if(kind==="reset"){await FB.m.sendPasswordResetEmail(FB.auth,em);FB.msg="Password reset email sent"}
+  }catch(e){FB.msg=fbErr(e)}
+  render();
+}
+
 async function pdfDoc(){
   if(PDFDOC)return PDFDOC;
   try{
@@ -645,6 +748,27 @@ function renderBreakdown(app){
 /* ===== SETTINGS VIEW ===== */
 function renderSettings(app){
   app.appendChild(el(`<div><div class="hdsp"></div><h1>Settings</h1><div class="sub">TGD • MARK I</div></div>`));
+  /* account / sync */
+  const ac=el(`<div class="card"><h2>Account</h2><div id="acctBox"></div></div>`);
+  const ab=ac.querySelector("#acctBox");
+  if(FB.user){
+    ab.innerHTML=`<div class="sub2" style="margin-bottom:10px">${esc(FB.user.email)}${FB.user.emailVerified?"":" • EMAIL NOT VERIFIED"}</div>
+      <div class="rowbtns"><button class="btn" id="acSync">SYNC NOW</button><button class="btn" id="acOut">SIGN OUT</button></div>
+      ${FB.msg?`<div class="sub2" style="margin-top:8px">${esc(FB.msg)}</div>`:""}`;
+    ab.querySelector("#acSync").onclick=async()=>{FB.msg="Syncing...";render();await fbPush();if(!FB.msg)FB.msg="Synced";render()};
+    ab.querySelector("#acOut").onclick=async()=>{await FB.m.signOut(FB.auth);FB.user=null;FB.msg="";render()};
+  }else{
+    ab.innerHTML=`<div class="sub2" style="margin-bottom:10px">Sign in to keep scripts, dividers and breakdowns in sync across your devices. Signed out, everything stays on this device only.</div>
+      <div class="bdf"><div class="bdfl">EMAIL</div><input type="email" id="acEm" autocomplete="email"></div>
+      <div class="bdf"><div class="bdfl">PASSWORD</div><input type="password" id="acPw" autocomplete="current-password"></div>
+      <div class="rowbtns"><button class="btn" id="acIn">SIGN IN</button><button class="btn" id="acUp">CREATE ACCOUNT</button></div>
+      <div class="rowbtns"><button class="btn" id="acReset">RESET PASSWORD</button></div>
+      ${FB.msg?`<div class="sub2" style="margin-top:8px">${esc(FB.msg)}</div>`:""}`;
+    ab.querySelector("#acIn").onclick=()=>acctGo("in");
+    ab.querySelector("#acUp").onclick=()=>acctGo("up");
+    ab.querySelector("#acReset").onclick=()=>acctGo("reset");
+  }
+  app.appendChild(ac);
   const th=el(`<div class="card"><h2>Theme</h2><div class="optrow" id="thRow">
     ${["auto","day","night"].map(t=>`<button class="opt${S.theme===t?" on":""}" data-t="${t}">${t.toUpperCase()}</button>`).join("")}
   </div></div>`);
@@ -720,3 +844,5 @@ function applyTheme(t){
 applyTheme(S.theme||"auto");
 $$("nav button").forEach(b=>b.onclick=()=>go(b.dataset.v));
 render();
+
+fbInit();
