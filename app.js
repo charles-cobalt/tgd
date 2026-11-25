@@ -221,7 +221,7 @@ async function ensurePdfjs(){
 async function pdfExtract(f){
   await ensurePdfjs();
   const buf=await f.arrayBuffer();
-  const doc=await pdfjsLib.getDocument({data:buf}).promise;
+  const doc=await pdfjsLib.getDocument({data:buf.slice(0)}).promise; /* pdf.js detaches the buffer it gets; keep ours intact */
   const pages=[];
   for(let p=1;p<=doc.numPages;p++){
     const pg=await doc.getPage(p),vp=pg.getViewport({scale:1}),tc=await pg.getTextContent();
@@ -325,8 +325,11 @@ async function fbAdopt(d){
 function b64enc(buf){const u=new Uint8Array(buf);let s="";for(let i=0;i<u.length;i+=32768)s+=String.fromCharCode.apply(null,u.subarray(i,i+32768));return btoa(s)}
 function b64dec(b){const t=atob(b);const u=new Uint8Array(t.length);for(let i=0;i<t.length;i++)u[i]=t.charCodeAt(i);return u.buffer}
 async function fbPushPdf(){
-  if(!S.pdf||!S.pdfId||FB.pdfPushedId===S.pdfId)return;
-  const buf=await idbGet("pdf");if(!buf)return;
+  if(S.pdf&&S.pdfId&&FB.pdfPushedId===S.pdfId)return;
+  try{const old=await FB.m.getDocs(FB.m.collection(FB.db,"users",FB.user.uid,"chunks"));for(const d of old.docs)await FB.m.deleteDoc(d.ref);}catch(e){}
+  FB.pdfPushedId=null;
+  if(!S.pdf||!S.pdfId)return;
+  const buf=await idbGet("pdf");if(!buf||!buf.byteLength)return;
   const b64=b64enc(buf),CH=700000,n=Math.ceil(b64.length/CH);
   for(let i=0;i<n;i++)await FB.m.setDoc(FB.m.doc(FB.db,"users",FB.user.uid,"chunks",String(i)),{i:i,data:b64.slice(i*CH,(i+1)*CH)});
   FB.pdfPushedId=S.pdfId;
