@@ -21,6 +21,9 @@ button:focus-visible{outline:1px solid #666}
 h1{font-size:21px;margin:6px 2px 2px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
 h2{font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin:20px 2px 8px}
 .sub{color:var(--mu);font-size:12px;margin:0 2px 14px;min-height:15px}
+.mu{color:var(--mu);font-size:12px;margin-top:4px}
+.card.p{padding:14px}
+label.f{display:block;color:var(--mu);font-size:12px;margin:12px 0 5px;text-transform:uppercase;letter-spacing:.05em}
 .sub2{color:var(--mu);font-size:12px;margin:0 0 12px;line-height:1.5}
 .card{background:var(--grad-card);border:1px solid var(--line);padding:12px 14px;margin-bottom:12px}
 .card h2{margin-top:2px}
