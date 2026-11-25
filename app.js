@@ -849,7 +849,7 @@ function renderSettings(app){
   const danger=el(`<div class="card"><div id="dangerZone"></div></div>`);
   app.appendChild(danger);
   const dz=danger.querySelector("#dangerZone");
-  const b=el(`<button class="btn sec">Reset everything</button>`);
+  const b=el(`<button class="btn sec" style="width:100%;box-sizing:border-box">Reset everything</button>`);
   b.onclick=()=>confirmInline(dz,"This clears the script, dividers and every breakdown on this device.","DELETE",()=>{
     S={projectTitle:"",scriptText:"",dividers:[],breakdowns:{},acceptedAuto:false,theme:S.theme};PDFDOC=null;idbDel("pdf").catch(()=>{});save();render();
   });
