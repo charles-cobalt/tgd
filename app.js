@@ -794,7 +794,7 @@ function renderBreakdown(app){
 function renderSettings(app){
   app.appendChild(el(`<div><div class="hdsp"></div><h1>Settings</h1><div class="sub">TGD • MARK I</div></div>`));
   /* account / sync */
-  const ac=el(`<div class="card"><h2>Account</h2><div id="acctBox"></div></div>`);
+  const ac=el(`<div class="card"><div id="acctBox"></div></div>`);
   const ab=ac.querySelector("#acctBox");
   if(FB.user){
     const ls=+localStorage.getItem("tgd.lastSync")||0;
@@ -817,16 +817,20 @@ function renderSettings(app){
     ab.querySelector("#acUp").onclick=()=>acctGo("up");
     ab.querySelector("#acReset").onclick=()=>acctGo("reset");
   }
-  app.appendChild(ac);
-  const th=el(`<div class="card"><h2>Theme</h2><div class="optrow" id="thRow">
+  app.appendChild(el(`<h2>Theme</h2>`));
+  const th=el(`<div class="optrow" id="thRow">
     ${["night","day","auto"].map(t=>`<button class="opt${S.theme===t?" on":""}" data-t="${t}">${t[0].toUpperCase()+t.slice(1)}</button>`).join("")}
-  </div></div>`);
+  </div>`);
   app.appendChild(th);
   th.querySelectorAll(".opt").forEach(b=>b.onclick=()=>{S.theme=b.dataset.t;applyTheme(S.theme);save();render()});
-  const pj=el(`<div class="card"><h2>Project</h2><div class="bdf"><div class="bdfl">PROJECT TITLE</div><input type="text" id="pjT" value="${esc(S.projectTitle)}"></div></div>`);
+  app.appendChild(el(`<h2>Account</h2>`));
+  app.appendChild(ac);
+  app.appendChild(el(`<h2>Project</h2>`));
+  const pj=el(`<div class="card"><div class="bdf"><div class="bdfl">PROJECT TITLE</div><input type="text" id="pjT" value="${esc(S.projectTitle)}"></div></div>`);
   app.appendChild(pj);
   pj.querySelector("#pjT").onchange=e=>{S.projectTitle=e.target.value;save()};
-  const io=el(`<div class="card"><h2>Backup</h2><div class="rowbtns">
+  app.appendChild(el(`<h2>Backup</h2>`));
+  const io=el(`<div class="card"><div class="rowbtns">
     <button class="btn sec" id="expBtn">Export</button>
     <button class="btn sec" id="impBtn2">Import</button>
     <input type="file" id="impFile2" accept=".json" hidden>
@@ -841,7 +845,8 @@ function renderSettings(app){
     const f=e.target.files[0];if(!f)return;
     try{const d=JSON.parse(await f.text());if(d&&typeof d==="object"&&"scriptText"in d){S=d;S.view=S.view||"text";PDFDOC=null;applyTheme(S.theme||"auto");save();render()}}catch(err){}
   };
-  const danger=el(`<div class="card"><h2>Reset</h2><div id="dangerZone"></div></div>`);
+  app.appendChild(el(`<h2>Reset</h2>`));
+  const danger=el(`<div class="card"><div id="dangerZone"></div></div>`);
   app.appendChild(danger);
   const dz=danger.querySelector("#dangerZone");
   const b=el(`<button class="btn sec">Reset everything</button>`);
